@@ -1,0 +1,287 @@
+- type: picture-elements
+  image: >-
+    data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
+    viewBox='0 0 1 1'%3E%3C/svg%3E
+  card_mod:
+    style: >
+      :host {
+        /* defaults: desktop / tablet */
+        --clock-size: 40dvw;
+
+        --alter-width: 20vw;
+        --alter-height: calc(var(--clock-size) * 1.02);
+        --alter-top: 4%;
+        --alter-right: 15px;
+        --alter-left: calc(var(--clock-size) + 100px);     
+        --y-portrait-extra: 70px;
+
+        --button-width: 140px;
+        --button-height: 50px;
+
+        --nav-left: 56px;
+        --nav-right: 4px;
+
+        --wachtkamer-height: 74%;
+        --main-top: 57px;
+        --main-left: 50px;       
+        --schrijfmethode: vertical-rl;
+        --tussenletters: 0.25em;
+        --my-dynamic-color: white;
+        --nav-font-size: clamp(11px, 1.2vw, 16px);
+        --track-height: 110%;
+        --track-width: 1.7vw;
+        --track-left: 48%;
+        --track-top: 45%;
+        --svg-height: 80%;
+        --svg-width: 70%;
+        --svg-left: 49%;
+        --svg-top: 60%;
+        --tic-height: 40dvh;
+        --tic-top: 40dvh;
+      }
+
+
+
+
+      ha-card {
+        position: fixed;
+        inset: 0;
+        background: beige;
+        overflow: hidden;
+      }
+  Elements
+    - type: custom:tailwindcss-template-card
+      view_layout:
+        grid-area: timing
+      entities:
+        - input_number.climate_start_time_minutes
+      content: >
+        {# ---------- base values from HA ---------- #}
+
+        {%- set now_ts   = now() %}
+
+        {%- set mins_now = (now_ts.hour * 60 + now_ts.minute)|int
+        %}
+
+        {%- set stored   =
+        states('input_number.climate_start_time_minutes')|int(mins_now
+        + 180) %}
+
+        {%- set center   = stored % 1440 %}
+
+
+        <ha-card class="flex items-center justify-center
+        bg-transparent shadow-none">
+          <div
+            class="relative flex flex-col items-center rounded-[2.5rem]
+                   bg-gradient-to-b from-blue-500 via-blue-600 to-blue-700
+                   shadow-xl overflow-hidden"
+            style="height: var(--alter-height); width: 100%;"
+          >
+
+            <!-- main picker container -->
+            <div id="tp-container"
+                 class="relative w-full h-full select-none"
+                 style="touch-action: none;">
+
+              <!-- strip with ALL ticks for full day (pre-rendered with Jinja) -->
+              <div id="tp-strip" class="absolute inset-0">
+                {%- for h in range(0,24) %}
+                  {%- for m in range(0,60,5) %}
+                    {%- set mins = h*60 + m %}
+                    {# shortest diff to current center = wheel behaviour #}
+                    {%- set raw_diff = center - mins %}
+                    {%- if raw_diff > 720 %}{%- set diff = raw_diff - 1440 %}
+                    {%- elif raw_diff < -720 %}{%- set diff = raw_diff + 1440 %}
+                    {%- else %}{%- set diff = raw_diff %}
+                    {%- endif %}
+                    {%- set vis = (diff >= -90 and diff <= 90) %}
+                    {%- set top = 50 + (diff/90.0)*50 %}
+                    {%- set is_hour = (m == 0) %}
+                    {%- set is_half = (m == 30) %}
+                    <div class="tp-tick absolute left-1/2 flex items-center justify-center"
+                         data-min="{{ mins }}"
+                         style="
+                           top: {{ top }}%;
+                           transform: translateX(-50%);
+                           opacity: {{ 1.0 if vis else 0 }};
+                           transition: opacity 0.15s ease-out, top 0.15s ease-out;
+                         ">
+                      {%- if is_hour %}
+                        <div class="flex items-center gap-1">
+                          <div style="width: 32px; height: 1px; background: rgba(255,255,255,0.7);"></div>
+                          <span class="text-xs text-white font-semibold whitespace-nowrap">
+                            {{ "%02d:00"|format(h) }}
+                          </span>
+                        </div>
+                      {%- elif is_half %}
+                        <div style="width: 24px; height: 1px; background: rgba(255,255,255,0.5);"></div>
+                      {%- else %}
+                        <div style="width: 14px; height: 1px; background: rgba(255,255,255,0.35);"></div>
+                      {%- endif %}
+                    </div>
+                  {%- endfor %}
+                {%- endfor %}
+              </div>
+
+              <!-- selection band lines -->
+              <div class="absolute left-0 right-0 pointer-events-none"
+                   style="top: 50%; transform: translateY(-50%);">
+                <div class="w-full h-px bg-white/30"></div>
+                <div class="w-full h-px bg-white/30 mt-20"></div>
+              </div>
+
+              <!-- gradients top/bottom -->
+              <div class="absolute inset-0 pointer-events-none">
+                <div class="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-blue-500 to-transparent"></div>
+                <div class="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-blue-700 to-transparent"></div>
+              </div>
+
+              <!-- BIG time in the middle (heat-until time) -->
+              <div id="tp-time"
+                   class="absolute left-1/2 top-[50%] -translate-x-1/2 -translate-y-[60%]
+                          font-mono text-white font-semibold tracking-[0.25em]"
+                   style="font-size: 2.3rem;">
+                {%- set ch = (center // 60) %}
+                {%- set cm = center % 60 %}
+                {{ "%02d:%02d"|format(ch, cm) }}
+              </div>
+
+              <!-- hidden slider that stores minutes + drives the ticks -->
+              <input
+                id="tp-slider"
+                type="range"
+                min="0"
+                max="1439"
+                step="1"
+                value="{{ center }}"
+                class="absolute bg-transparent"
+                style="
+                  left: 50%;
+                  top: 50%;
+                  width: 80%;
+                  height: 40%;
+                  transform: translate(-50%, -50%) rotate(-90deg);
+                  opacity: 0;
+                  pointer-events: none;
+                "
+                oninput="
+                  const slider = this;
+                  const card   = slider.closest('ha-card');
+                  const ticks  = card.querySelectorAll('.tp-tick');
+                  const label  = card.querySelector('#tp-time');
+              
+                  let v = parseInt(slider.value, 10);
+                  if (!Number.isFinite(v)) v = 0;
+                  v = ((v % 1440) + 1440) % 1440;
+              
+                  // --- grote klok in het midden, per minuut ---
+                  const h  = Math.floor(v / 60);
+                  const m  = v % 60;
+                  const hh = (h < 10 ? '0' : '') + h;
+                  const mm = (m < 10 ? '0' : '') + m;
+                  if (label) label.textContent = hh + ':' + mm;
+              
+                  // --- alle tics herschikken rond de nieuwe center-waarde ---
+                  ticks.forEach(el => {
+                    const mins = parseInt(el.dataset.min, 10);
+                    let diff = v - mins;           // later = lager in beeld
+                    if (diff > 720)  diff -= 1440; // wiel-gedrag
+                    if (diff < -720) diff += 1440;
+              
+                    const top = 50 + (diff / 90) * 50;  // 3h venster
+                    el.style.top = top + '%';
+              
+                    if (diff < -90 || diff > 90) {
+                      el.style.opacity = '0';
+                    } else {
+                      const fade = 1 - Math.abs(diff) / 90;
+                      el.style.opacity = String(0.2 + 0.8 * fade);
+                    }
+                  });
+              
+                  // ---------- 10s INACTIVITEIT: spring terug naar NU ----------
+                  // timer zit *op de slider zelf*, geen window-globals meer
+                  if (slider._idleTimer) {
+                    clearTimeout(slider._idleTimer);
+                  }
+                  slider._idleTimer = setTimeout(() => {
+                    const d = new Date();
+                    const n = d.getHours() * 60 + d.getMinutes();  // minuten sinds middernacht
+                    slider.value = n;
+                    slider.dispatchEvent(new Event('input', { bubbles: true }));
+                    slider.dispatchEvent(new Event('change', { bubbles: true }));
+                  }, 10000);
+                "
+                onchange="
+                  const v = parseInt(this.value, 10) || 0;
+                  if (window.hass) {
+                    window.hass.callService('input_number', 'set_value', {
+                      entity_id: 'input_number.climate_start_time_minutes',
+                      value: v
+                    });
+                  }
+                "
+              />
+
+
+
+
+              <!-- BIG drag area, basically the whole blue panel -->
+              <div
+                class="absolute left-0 right-0 top-0 bottom-0"
+                style="cursor: grab; touch-action: none;"
+                onpointerdown="
+                  const slider = this.closest('ha-card').querySelector('#tp-slider');
+                  if (!slider) return;
+                  this._dragging = true;
+                  this._startY   = event.clientY;
+                  this._startVal = parseInt(slider.value,10) || 0;
+                  this.style.cursor = 'grabbing';
+                  this.setPointerCapture(event.pointerId);
+                "
+                onpointermove="
+                  if (!this._dragging) return;
+                  const slider = this.closest('ha-card').querySelector('#tp-slider');
+                  if (!slider) return;
+                  const dy = event.clientY - this._startY;
+                  const factor = 0.3;  /* sensitivity: minutes per pixel */
+                  let newVal = this._startVal + dy * factor;
+                  newVal = Math.round(newVal);
+                  const min = parseInt(slider.min,10);
+                  const max = parseInt(slider.max,10);
+                  const range = max - min + 1;
+                  newVal = ((newVal - min) % range + range) % range + min;
+                  slider.value = newVal;
+                  slider.dispatchEvent(new Event('input', { bubbles: true }));
+                "
+                onpointerup="
+                  const slider = this.closest('ha-card').querySelector('#tp-slider');
+                  if (slider) slider.dispatchEvent(new Event('change', { bubbles: true }));
+                  this._dragging = false;
+                  this.style.cursor = 'grab';
+                  try { this.releasePointerCapture(event.pointerId); } catch(e) {}
+                "
+                onpointercancel="
+                  this._dragging = false;
+                  this.style.cursor = 'grab';
+                "
+              ></div>
+
+            </div>
+
+            <!-- button row from your demo – you can remove this if not needed -->
+            <div class="absolute bottom-4 left-4 right-4">
+              <div
+                class="w-full text-center font-semibold py-3 rounded-2xl shadow-md"
+                style="
+                  background: linear-gradient(145deg,#5dade2,#1b4f72);
+                  color: #ffffff;
+                  border: 2px solid #ffffff;
+                "
+              >
+                Stel eindtijd in
+              </div>
+            </div>
+          </div>
+        </ha-card>
