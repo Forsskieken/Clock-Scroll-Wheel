@@ -1,0 +1,177 @@
+- type: custom:tailwindcss-template-card
+  view_layout:
+    grid-area: timing
+  entities:
+    - input_number.climate_start_time_minutes
+  content: >
+    {# ---------- base value from HA: "heat until" ---------- #}
+    {%- set now_ts   = now() %}
+    {%- set mins_now = (now_ts.hour * 60 + now_ts.minute)|int %}
+    {%- set stored   = states('input_number.climate_start_time_minutes')|int(mins_now + 180) %}
+    {%- set center   = stored % 1440 %}
+    {%- set ch = (center // 60) %}
+    {%- set cm = center % 60 %}
+  
+    <ha-card class="flex items-center justify-center bg-transparent shadow-none">
+      <div
+        class="relative flex flex-col items-center rounded-[2.5rem]
+               bg-gradient-to-b from-blue-500 via-blue-600 to-blue-700
+               shadow-xl overflow-hidden"
+        style="height: var(--alter-height); width: 100%;"
+      >
+  
+        <!-- BIG time in the middle (heat-until time) -->
+        <div
+          id="tp-time"
+          data-mins="{{ center }}"
+          class="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2
+                 font-mono text-white font-semibold tracking-[0.25em]
+                 text-4xl"
+        >
+          {{ "%02d:%02d"|format(ch, cm) }}
+        </div>
+  
+        <!-- label / SET-knop bovenaan -->
+        <div
+          class="absolute left-1/2 top-6 -translate-x-1/2"
+        >
+          <div
+            style="
+              padding: 0.35rem 1.8rem;
+              border-radius: 999px;
+              border: 3px solid #ffffff;    /* spierwitte rand */
+              background: transparent;      /* geen extra kleur, alleen de card-gradient */
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            "
+          >
+            <span
+              class="text-4xl font-semibold tracking-[0.2em]"
+              style="color:#ffffff;"        /* witte tekst */
+            >
+               SET
+            </span>
+          </div>
+        </div>
+  
+  
+        <!-- faint divider line -->
+        <div class="absolute left-6 right-6 top-[55%] -translate-y-1/2">
+          <div class="w-full h-px bg-white/25"></div>
+        </div>
+  
+        <!-- TOP TAP AREA: +5 min -->
+        <div
+          class="absolute left-0 right-0 top-[15%] bottom-1/2 flex items-center justify-center"
+          style="cursor: pointer; touch-action: manipulation;"
+          onclick="
+            const card  = this.closest('ha-card');
+            const label = card.querySelector('#tp-time');
+            if (!label) return;
+          
+            const step = 15; // minuten per tik omhoog
+          
+            // 'nu' in minuten sinds middernacht
+            const d       = new Date();
+            const nowRaw  = d.getHours() * 60 + d.getMinutes();
+          
+            // afronden naar eerste 15-tal minuten NA nu
+            const roundedNow = Math.ceil(nowRaw / step) * step;   // 0–1440, bv 14:07 -> 14:15
+          
+            // huidige waarde uit dataset of fallback = roundedNow
+            let mins = parseInt(label.dataset.mins || String(roundedNow), 10);
+            if (!Number.isFinite(mins)) mins = roundedNow;
+          
+            // nooit onder 'nu' blijven hangen
+            if (mins < roundedNow) mins = roundedNow;
+          
+            // +15 min, maar niet voorbij 23:59
+            mins = Math.min(mins + step, 1439);
+          
+            // updaten in dataset en op scherm
+            label.dataset.mins = String(mins);
+            const h  = Math.floor(mins / 60);
+            const m  = mins % 60;
+            const hh = (h < 10 ? '0' : '') + h;
+            const mm = (m < 10 ? '0' : '') + m;
+            label.textContent = hh + ':' + mm;
+          
+            // naar Home Assistant schrijven
+            if (window.hass) {
+              window.hass.callService('input_number', 'set_value', {
+                entity_id: 'input_number.climate_start_time_minutes',
+                value: mins
+              });
+            }
+          "
+  
+        >
+          <div class="flex flex-col items-center text-white/70">
+            <div class="w-20 h-20 rounded-full border-4 border-white/90 flex items-center justify-center mb-3">
+              <span class="text-6xl leading-none">+</span>
+            </div>
+            <span class="text-[2rem] uppercase tracking-[0.2em]">
+              LATER
+            </span>
+          </div>
+        </div>
+  
+        <!-- BOTTOM TAP AREA: -5 min -->
+        <div
+          class="absolute left-0 right-0 top-[60%] bottom-0 flex items-center justify-center"
+          style="cursor: pointer; touch-action: manipulation;"
+          onclick="
+            const card  = this.closest('ha-card');
+            const label = card.querySelector('#tp-time');
+            if (!label) return;
+          
+            const step = 15; // minuten per tik omlaag
+          
+            // 'nu' in minuten sinds middernacht
+            const d       = new Date();
+            const nowRaw  = d.getHours() * 60 + d.getMinutes();
+          
+            // afronden naar eerste 15-tal minuten NA nu
+            const roundedNow = Math.ceil(nowRaw / step) * step;
+          
+            // huidige waarde uit dataset of fallback = roundedNow
+            let mins = parseInt(label.dataset.mins || String(roundedNow), 10);
+            if (!Number.isFinite(mins)) mins = roundedNow;
+          
+            // nooit onder 'nu' afronding gaan
+            if (mins < roundedNow) mins = roundedNow;
+          
+            // -15 min, maar NIET vroeger dan roundedNow
+            mins = Math.max(mins - step, roundedNow);
+          
+            // updaten in dataset en op scherm
+            label.dataset.mins = String(mins);
+            const h  = Math.floor(mins / 60);
+            const m  = mins % 60;
+            const hh = (h < 10 ? '0' : '') + h;
+            const mm = (m < 10 ? '0' : '') + m;
+            label.textContent = hh + ':' + mm;
+          
+            // naar Home Assistant schrijven
+            if (window.hass) {
+              window.hass.callService('input_number', 'set_value', {
+                entity_id: 'input_number.climate_start_time_minutes',
+                value: mins
+              });
+            }
+          "
+  
+        >
+          <div class="flex flex-col items-center text-white/70">
+            <div class="w-20 h-20 rounded-full border-4 border-white/90 flex items-center justify-center mb-3">
+              <span class="text-6xl leading-none">−</span>
+            </div>
+            <span class="text-[2rem] uppercase tracking-[0.2em]">
+              VROEGER
+            </span>
+          </div>
+        </div>
+  
+      </div>
+    </ha-card>
